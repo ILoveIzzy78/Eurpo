@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Endless Runner</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #222;
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+        }
+        
+        #game-container {
+            text-align: center;
+        }
+
+        canvas {
+            background-color: #555;
+            border: 4px solid #fff;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        p {
+            font-size: 1.2rem;
+            margin: 10px 0;
+        }
+
+        .controls {
+            color: #aaa;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <h2>Subway Surfers: 2D Demake</h2>
+        <p>Score: <span id="score">0</span></p>
+        <canvas id="gameCanvas" width="300" height="500"></canvas>
+        <p class="controls">Left/Right Arrows to switch lanes. Up Arrow to jump.</p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreElement = document.getElementById("score");
+
+        // Game State Variables
+        let score = 0;
+        let gameSpeed = 5;
+        let frame = 0;
+        let gameOver = false;
+
+        // Player Setup
+        const player = {
+            lane: 1, // 0: Left, 1: Middle, 2: Right
+            y: 400,
+            width: 40,
+            height: 40,
+            isJumping: false,
+            jumpTimer: 0
+        };
+
+        const lanePositions = [50, 150, 250]; // Center X coordinate for each of the 3 lanes
+        let obstacles = [];
+
+        // Input Controls
+        document.addEventListener("keydown", (e) => {
+            if (gameOver) {
+                if (e.key === "Enter") resetGame();
+                return;
+            }
+            
+            if (e.key === "ArrowLeft" && player.lane > 0) player.lane--;
+            if (e.key === "ArrowRight" && player.lane < 2) player.lane++;
+            if (e.key === "ArrowUp" && !player.isJumping) {
+                player.isJumping = true;
+                player.jumpTimer = 35; // How many frames the jump lasts
+            }
+        });
+
+        // Obstacle Spawner
+        function spawnObstacle() {
+            // Spawns obstacles faster as the score gets higher
+            let spawnRate = Math.max(20, 80 - Math.floor(score / 2)); 
+            
+            if (frame % spawnRate === 0) { 
+                let lane = Math.floor(Math.random() * 3);
+                obstacles.push({ lane: lane, y: -50, width: 40, height: 40 });
+            }
+        }
+
+        // Restart Game
+        function resetGame() {
+            score = 0;
+            gameSpeed = 5;
+            obstacles = [];
+            player.lane = 1;
+            gameOver = false;
+            frame = 0;
+            scoreElement.innerText = score;
+            gameLoop();
+        }
+
+        // Main Game Loop
+        function gameLoop() {
+            if (gameOver) {
+                ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "white";
+                ctx.font = "bold 30px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText("Game Over!", canvas.width / 2, canvas.height / 2 - 20);
+                ctx.font = "16px Arial";
+                ctx.fillText("Press ENTER to Restart", canvas.width / 2, canvas.height / 2 + 20);
+                return;
+            }
+
+            // 1. Clear Canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 2. Draw Lane Dividers
+            ctx.strokeStyle = "#888";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([15, 15]); // Dashed lines like a road
+            ctx.beginPath();
+            ctx.moveTo(100, 0); ctx.lineTo(100, 500);
+            ctx.moveTo(200, 0); ctx.lineTo(200, 500);
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset to solid line for other shapes
+
+            // 3. Update & Draw Player
+            let playerX = lanePositions[player.lane];
+            let playerY = player.y;
+
+            if (player.isJumping) {
+                player.jumpTimer--;
+                playerY -= 30; // Move up visually to simulate jumping
+                ctx.fillStyle = "#00BFFF"; // Lighter blue while jumping
+                
+                // End jump
+                if (player.jumpTimer <= 0) player.isJumping = false;
+            } else {
+                ctx.fillStyle = "#0055FF"; // Standard blue
+            }
+
+            // Draw player square
+            ctx.fillRect(playerX - player.width / 2, playerY, player.width, player.height);
+
+            // 4. Update & Draw Obstacles
+            for (let i = 0; i < obstacles.length; i++) {
+                let obs = obstacles[i];
+                obs.y += gameSpeed; // Move down the screen
+                
+                ctx.fillStyle = "#FF3333"; // Red obstacles
+                let obsX = lanePositions[obs.lane];
+                ctx.fillRect(obsX - obs.width / 2, obs.y, obs.width, obs.height);
+
+                // 5. Collision Detection
+                // If they are in the same lane, and the player isn't jumping over it
+                if (obs.lane === player.lane && !player.isJumping) {
+                    // Check Y-axis overlap
+                    if (obs.y + obs.height > player.y && obs.y < player.y + player.height) {
+                        gameOver = true;
+                    }
+                }
+
+                // 6. Clean up off-screen obstacles & Add Score
+                if (obs.y > 500) {
+                    obstacles.splice(i, 1);
+                    i--; // Adjust index after removing
+                    score++;
+                    scoreElement.innerText = score;
+                    
+                    // Slightly increase speed every 10 points
+                    if (score % 10 === 0) {
+                        gameSpeed += 0.5;
+                    }
+                }
+            }
+
+            spawnObstacle();
+            frame++;
+            requestAnimationFrame(gameLoop); // Call next frame
+        }
+
+        // Start the game
+        gameLoop();
+    </script>
+</body>
+</html>
